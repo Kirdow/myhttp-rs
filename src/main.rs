@@ -1,29 +1,61 @@
-use std::net::{TcpListener, TcpStream};
-use std::io::{self, BufReader, BufRead, Write};
+mod http_util;
+mod request;
+mod io_util;
+mod util;
 
-fn write_body(mut stream: &TcpStream, body: &str) -> std::io::Result<()> {
-    let len = body.len();
-    writeln!(stream, "Content-Length: {}\r", len)?;
-    writeln!(stream, "\r")?;
-    writeln!(stream, "{}\r", body)
-}
+use http_util::get_valid_path;
+use io_util::{read_all_file, write_body, write_line};
+use request::HttpRequest;
+use util::{log_title, read_line};
+
+use std::net::{TcpListener, TcpStream};
+use std::io::{self, BufRead, BufReader, Write};
+
+use crate::io_util::write_error;
 
 fn handle_client(mut stream: TcpStream) -> io::Result<()> {
     let reader = BufReader::new(&stream);
 
+    let mut request = HttpRequest::new();
+
+    log_title("HTTP Request");
     for line in reader.lines() {
         let line = line?;
         if line.is_empty() {
             break;
         }
 
-        println!("{}", line);
+        read_line(line.as_str());
+        request.feed(&line).expect("ERROR: Failed to feed request");
     }
 
-    stream.write_all("HTTP/1.1 200 OK\r\n".as_bytes())?;
-    stream.write_all("Connection: close\r\n".as_bytes())?;
-    stream.write_all("Content-Type: text/html\r\n".as_bytes())?;
-    write_body(&stream, "<html><body><h1>Hello, World!</h1></body></html>")?;
+    log_title("HTTP Response");
+    match get_valid_path(&request) {
+        Ok(path) => {
+            if request.resource_type == "text/html" {
+                match read_all_file(path.as_str()) {
+                    Err(e) => {
+                        println!("Failed to read requested file: {}", e);
+                        write_error(&stream, 500)?;
+                    },
+                    Ok(content) => {
+                        write_line(&stream, "HTTP/1.1 200 OK")?;
+                        write_line(&stream, "Connection: close")?;
+                        write_line(&stream, "Content-Type: text/html")?;
+                        write_body(&stream, content.as_str())?;
+                    }
+                }
+            } else {
+                println!("Invalid file type: {}", path);
+                write_error(&stream, 403)?;
+            }
+        },
+        Err(e) => {
+            println!("Failed to recognize requested file: {}", e);
+            write_error(&stream, 404)?;
+        }
+    }
+
     stream.flush()?;
     drop(stream);
     Ok(())
