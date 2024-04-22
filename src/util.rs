@@ -4,11 +4,11 @@ pub fn log_empty(n: i32) {
     }
 }
 
-pub fn log_title(title: &str) {
+pub fn log_title(who: &str, title: &str) {
     log_empty(2);
-    println!("{}", title);
+    println!("{} {}", who, title);
 }
 
-pub fn read_line(line: &str) {
-    println!("--> {}", line);
+pub fn read_line(who: &str, line: &str) {
+    println!("{} --> {}", who, line);
 }

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::HttpRequest;
+use crate::{http_error::{HttpError, http_errors}, HttpRequest};
 
 pub fn split_method(input: &str) -> Option<(String, String, String)> {
     let mut parts = input.splitn(3, ' ');
@@ -12,12 +12,14 @@ pub fn split_method(input: &str) -> Option<(String, String, String)> {
     Some((method.to_string(), path.to_string(), version.to_string()))
 }
 
-pub fn get_valid_path(request: &HttpRequest) -> Result<String, String> {
+pub fn get_valid_path(request: &HttpRequest) -> Result<String, HttpError> {
     if !request.is_init || !request.valid {
-        return Err("ERROR: Failed to fetch valid path, request is not valid!".to_string());
+        return Err(http_errors::msg::internal_server_error("Failed to fetch valid path, request is not valid"));
     }
 
-    let base_path = Path::new("./public").canonicalize().map_err(|_| "Failed to resolve base path".to_string())?;
+    let base_path = Path::new("./public").canonicalize().map_err(|_| {
+        http_errors::msg::internal_server_error("Failed to resolve the path")
+    })?;
     let mut full_path = PathBuf::from(&base_path);
 
     full_path.push(request.get_file_name().trim_start_matches("/"));
@@ -27,9 +29,9 @@ pub fn get_valid_path(request: &HttpRequest) -> Result<String, String> {
             if canonical_path.starts_with(&base_path) {
                 Ok(canonical_path.display().to_string())
             } else {
-                Err("ERROR: User requested invalid file!".to_string())
+                Err(http_errors::msg::forbidden("User requested invalid file"))
             }
         },
-        Err(_) => Err("Invalid path provided".to_string()),
+        Err(_) => Err(http_errors::msg::not_found("Invalid path provided")),
     }
 }
