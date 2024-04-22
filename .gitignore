@@ -2,5 +2,5 @@
 /target
 
 # IDE
-.vs/
-.vscode/
+.vs
+.vscode
