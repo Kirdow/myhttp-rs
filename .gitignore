@@ -1,1 +1,6 @@
+# Binaries
 /target
+
+# IDE
+.vs/
+.vscode/
