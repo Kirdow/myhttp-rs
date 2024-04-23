@@ -50,6 +50,10 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
     }
 
     let mut response = HttpResponse::new(request, &mut stream);
+    if let Err(http_err) = response.headers.add_from_pair("Connection", "close") {
+        respond_client_error(&mut response.request.transcript, &stream, http_err)?;
+        return end_client(&stream);
+    }
 
     log_title(&response.request.transcript, "HTTP Response");
     match get_valid_path(&response.request) {
