@@ -66,12 +66,12 @@ impl<'a> HttpResponse<'a> {
     }
 
     pub fn flush(&mut self) -> std::io::Result<()> {
-        let ts = &self.request.transcript;
+        let ts = &mut self.request.transcript;
 
         write_line(ts, self.stream, format!("HTTP/1.1 {}", self.code).as_str())?;
         if let Some(http_err) = &self.error {
             write_line(ts, self.stream, format!("X-Error-Info: {}", http_err.get_error_msg()).as_str())?;
-            self.request.transcript.push(format!("Full Error Info: {}", http_err).as_str());
+            ts.push(format!("Full Error Info: {}", http_err).as_str());
         }
 
         for (key, value) in self.headers.iter() {

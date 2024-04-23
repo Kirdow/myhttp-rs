@@ -4,10 +4,14 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::{http_error::{http_errors, HttpError}, io_util::{self, validate_path}, request, str_util::Builder, util::{self, get_time_str, get_time_str_from}};
 
+struct TranscriptPrefix {
+    pub prefix: String,
+    pub prev: Option<Box<TranscriptPrefix>>
+}
 
 pub struct Transcript {
     file: File,
-    prefix: Option<String>,
+    prefix: Option<Box<TranscriptPrefix>>,
     start: DateTime<Utc>
 }
 
@@ -22,7 +26,7 @@ impl Transcript {
 
         let transcript = Self {
             file: Self::try_get_file_name(&stream_file_name, current_time_int)?,
-            prefix: Some(stream_name.to_owned()),
+            prefix: Some(Box::new(TranscriptPrefix { prefix: stream_name.to_owned(), prev: None })),
             start: current_time
         };
 
@@ -33,16 +37,49 @@ impl Transcript {
         Ok(transcript)
     }
 
-    pub fn set_prefix(&mut self, prefix: &str) {
-        self.prefix = if prefix.is_empty() {
-            None
-        } else {
-            Some(prefix.to_string())
+    pub fn with_prefix<F>(&mut self, prefix: &str, mut func: F) -> Result<(), HttpError> where F: FnMut(&Transcript) -> Result<(), HttpError> {
+        self.add_prefix(prefix);
+        let result = func(self);
+        self.pop_prefix();
+        result
+    }
+
+    pub fn add_prefix(&mut self, prefix: &str) {
+        if prefix.is_empty() {
+            self.pop_prefix();
+            return;
+        }
+    
+        if self.prefix.is_none() {
+            self.prefix = Some(Box::new(TranscriptPrefix { prefix: prefix.to_string(), prev: None }))
+        } else if let Some(prefix_box) = self.prefix.take() {
+            self.prefix = Some(Box::new(TranscriptPrefix { prefix: prefix.to_string(), prev: Some(prefix_box)}))
         }
     }
 
-    pub fn get_prefix(&self) -> Option<&String> {
-        self.prefix.as_ref()
+    pub fn pop_prefix(&mut self) {
+        if let Some(prefix_box) = self.prefix.take() {
+            self.prefix = prefix_box.prev
+        }
+    }
+
+    pub fn get_prefix(&self) -> Option<String> {
+        let mut builder = Builder::new(&String::from(" "));
+        
+        let mut prefix = &self.prefix;
+        if prefix.is_none() {
+            return None;
+        }
+
+        loop {
+            if let Some(prefix_box) = prefix {
+                builder.prepend(&prefix_box.prefix);
+            
+                prefix = &prefix_box.prev;
+            } else {
+                return Some(builder.result);
+            }
+        }
     }
 
     fn try_get_file_name(name: &String, time_int: i32) -> Result<File, HttpError> {
@@ -64,10 +101,7 @@ impl Transcript {
             full_path.push(path);
             
             if !full_path.exists() {
-                return File::create(&full_path).map_err(|e| {
-                    println!("Failed to create transcript file: {}", e);
-                    http_errors::msg::internal_server_error(format!("Failed to create transcript file: {:?}", &full_path).as_str())
-                });
+                return File::create(&full_path).map_err(HttpError::from);
             }
 
             counter += 1;
@@ -89,22 +123,18 @@ impl Transcript {
     }
 
     fn push_int(&self, time: &String, line: &str) -> Result<(), HttpError> {
-        let data = if let Some(prefix) = &self.prefix {
-            format!("{} [{}]: {}", prefix, time, line)
+        let data = if let Some(prefix) = self.get_prefix() {
+            format!("[{}] {} {}", time, prefix, line)
         } else {
-            format!("[{}]: {}", time, line)
+            format!("[{}] {}", time, line)
         };
 
         println!("[TS] {}", data);
-        write!(&self.file, "{}\r\n", data).map_err(|e| {
-            http_errors::msg::internal_server_error(format!("Failed to push transcript line: {}", e).as_str())
-        })
+        write!(&self.file, "{}\r\n", data).map_err(HttpError::from)
     }
 
     pub fn flush(&mut self) -> Result<(), HttpError> {
-        self.file.flush().map_err(|e| {
-            http_errors::msg::internal_server_error(format!("Failed to flush transcript file: {}", e).as_str())
-        })
+        self.file.flush().map_err(HttpError::from)
     }
 }
 

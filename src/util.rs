@@ -15,8 +15,8 @@ pub fn log_title(ts: &Transcript, title: &str) {
     ts.push(title);
 }
 
-pub fn read_line(ts: &Transcript, line: &str) {
-    ts.push(format!("--> {}", line).as_str());
+pub fn read_line(ts: &mut Transcript, line: &str) {
+    ts.with_prefix("-->", |ts| ts.push(line));
 }
 
 pub fn get_time(default: i32) -> i32 {

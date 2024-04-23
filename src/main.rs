@@ -18,12 +18,12 @@ use http_error::{HttpError, HttpCode, http_errors};
 
 use std::thread;
 use std::net::{TcpListener, TcpStream};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Error, Write};
 
 use crate::io_util::{get_stream_name, write_error};
 
-fn respond_client_error(mut ts: &Transcript, stream: &TcpStream, err: HttpError) -> io::Result<()> {
-    write_error(ts, &stream, err)
+fn respond_client_error(ts: &mut Transcript, stream: &TcpStream, err: HttpError) -> io::Result<()> {
+    write_error(ts, &stream, err).map_err(io::Error::from)
 }
 
 fn end_client(mut stream: &TcpStream) -> io::Result<()> {
@@ -34,11 +34,7 @@ fn end_client(mut stream: &TcpStream) -> io::Result<()> {
 fn handle_client(stream: &TcpStream) -> io::Result<()> {
     let reader = BufReader::new(stream);
 
-    let mut request = HttpRequest::new(stream).map_err(|e| {
-        println!("{}: Failed to create request: {}", get_stream_name(stream), e);
-        io::Error::new(io::ErrorKind::Other, "Failed to create valid request")
-    })?;
-
+    let mut request = HttpRequest::new(stream).map_err(Error::from)?;
     log_title(&request.transcript, "HTTP Request");
     for line in reader.lines() {
         let line = line?;
@@ -46,9 +42,9 @@ fn handle_client(stream: &TcpStream) -> io::Result<()> {
             break;
         }
 
-        read_line(&request.transcript, line.as_str());
+        read_line(&mut request.transcript, line.as_str());
         if let Err(http_err) = request.feed(&line) {
-            respond_client_error(&request.transcript, &stream, http_err)?;
+            respond_client_error(&mut request.transcript, &stream, http_err)?;
             return end_client(stream);
         }
     }

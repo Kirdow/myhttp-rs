@@ -1,4 +1,6 @@
 
+use std::io::{Error, ErrorKind};
+
 use crate::str_util::Builder;
 
 #[derive(Clone)]
@@ -43,7 +45,7 @@ impl HttpError {
         }
     }
 
-    pub fn from(code: i32) -> Self {
+    pub fn from_code(code: i32) -> Self {
         Self::new(HttpCode::from(code))
     }
 
@@ -58,6 +60,20 @@ impl HttpError {
     pub fn set_info(&mut self, msg: &str) -> HttpError {
         self.info = Some(msg.to_string());
         self.to_owned()
+    }
+}
+
+impl From<HttpError> for Error {
+    fn from(err: HttpError) -> Error {
+        println!("IO <-- HTTP Error: {}", err.to_string());
+        Error::new(ErrorKind::Other, format!("HTTP Error: {}", err.to_string()))
+    }
+}
+
+impl From<Error> for HttpError {
+    fn from(err: Error) -> HttpError {
+        println!("HTTP <-- IO Error: {}", err.to_string());
+        http_errors::msg::internal_server_error(format!("IO Error: {}", err.to_string()).as_str())
     }
 }
 

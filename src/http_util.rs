@@ -17,9 +17,7 @@ pub fn get_valid_path(request: &HttpRequest) -> Result<String, HttpError> {
         return Err(http_errors::msg::internal_server_error("Failed to fetch valid path, request is not valid"));
     }
 
-    let base_path = Path::new("./public").canonicalize().map_err(|_| {
-        http_errors::msg::internal_server_error("Failed to resolve the path")
-    })?;
+    let base_path = Path::new("./public").canonicalize().map_err(HttpError::from)?;
     let mut full_path = PathBuf::from(&base_path);
 
     full_path.push(request.get_file_name().trim_start_matches("/"));

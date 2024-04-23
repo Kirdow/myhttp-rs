@@ -6,12 +6,12 @@ pub fn get_stream_name(stream: &TcpStream) -> String {
     stream.peer_addr().map(|addr| addr.to_string()).unwrap_or(String::from("Unknown Address"))
 }
 
-pub fn write_line(ts: &Transcript, mut stream: &TcpStream, line: &str) -> std::io::Result<()> {
-    ts.push(format!("<-- {}", line).as_str());
-    writeln!(stream, "{}\r", line)
+pub fn write_line(ts: &mut Transcript, mut stream: &TcpStream, line: &str) -> Result<(), HttpError> {
+    ts.with_prefix("<--", |ts| ts.push(line))?;
+    writeln!(stream, "{}\r", line).map_err(HttpError::from)
 }
 
-pub fn write_body(ts: &Transcript, stream: &TcpStream, body: &str) -> std::io::Result<()> {
+pub fn write_body(ts: &mut Transcript, stream: &TcpStream, body: &str) -> Result<(), HttpError> {
     let len = body.len();
 
     write_line(ts, stream, format!("Content-Length: {}", len).as_str())?;
@@ -25,14 +25,12 @@ pub fn read_all_file(path: &str) -> Result<String, HttpError> {
     })?;
     
     let mut contents = String::new();
-    file.read_to_string(&mut contents).map_err(|err| {
-        http_errors::msg::internal_server_error(format!("Failed to read file contents: {}", err.to_string()).as_str())
-    })?;
+    file.read_to_string(&mut contents).map_err(HttpError::from)?;
 
     Ok(contents)
 }
 
-pub fn write_error(ts: &Transcript, stream: &TcpStream, http_err: HttpError) -> std::io::Result<()> {
+pub fn write_error(ts: &mut Transcript, stream: &TcpStream, http_err: HttpError) -> Result<(), HttpError> {
     write_line(ts, &stream, format!("HTTP/1.1 {}", http_err.code).as_str())?;
     write_line(ts, &stream, format!("X-Error-Info: {}", http_err).as_str())?;
     write_line(ts, &stream, "Connection: close")?;

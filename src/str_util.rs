@@ -12,6 +12,15 @@ impl Builder {
         }
     }
 
+    pub fn prepend(&mut self, value: &String) -> &mut Self {
+        if !self.result.is_empty() {
+            self.result.insert_str(0, self.delimiter.as_str());
+        }
+
+        self.result.insert_str(0, value.as_str());
+        self
+    }
+
     pub fn append(&mut self, value: &String) -> &mut Self {
         if !self.result.is_empty() {
             self.result.push_str(&self.delimiter);
