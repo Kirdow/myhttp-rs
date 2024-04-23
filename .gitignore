@@ -4,3 +4,7 @@
 # IDE
 .vs
 .vscode
+
+# Logs/Transcripts
+/logs
+*.log

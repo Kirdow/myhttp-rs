@@ -5,11 +5,14 @@ mod io_util;
 mod util;
 mod http_error;
 mod str_util;
+mod headers;
+mod transcript;
 
 use http_util::get_valid_path;
 use io_util::read_all_file;
 use request::HttpRequest;
 use response::HttpResponse;
+use transcript::Transcript;
 use util::{log_title, read_line};
 use http_error::{HttpError, HttpCode, http_errors};
 
@@ -17,10 +20,10 @@ use std::thread;
 use std::net::{TcpListener, TcpStream};
 use std::io::{self, BufRead, BufReader, Write};
 
-use crate::io_util::write_error;
+use crate::io_util::{get_stream_name, write_error};
 
-fn respond_client_error(stream: &TcpStream, err: HttpError) -> io::Result<()> {
-    write_error(&stream, err)
+fn respond_client_error(mut ts: &Transcript, stream: &TcpStream, err: HttpError) -> io::Result<()> {
+    write_error(ts, &stream, err)
 }
 
 fn end_client(mut stream: &TcpStream) -> io::Result<()> {
@@ -31,25 +34,28 @@ fn end_client(mut stream: &TcpStream) -> io::Result<()> {
 fn handle_client(stream: &TcpStream) -> io::Result<()> {
     let reader = BufReader::new(stream);
 
-    let mut request = HttpRequest::new(stream);
+    let mut request = HttpRequest::new(stream).map_err(|e| {
+        println!("{}: Failed to create request: {}", get_stream_name(stream), e);
+        io::Error::new(io::ErrorKind::Other, "Failed to create valid request")
+    })?;
 
-    log_title(request.who.as_str(), "HTTP Request");
+    log_title(&request.transcript, "HTTP Request");
     for line in reader.lines() {
         let line = line?;
         if line.is_empty() {
             break;
         }
 
-        read_line(request.who.as_str(), line.as_str());
+        read_line(&request.transcript, line.as_str());
         if let Err(http_err) = request.feed(&line) {
-            respond_client_error(&stream, http_err)?;
+            respond_client_error(&request.transcript, &stream, http_err)?;
             return end_client(stream);
         }
     }
 
     let mut response = HttpResponse::new(request, &stream);
 
-    log_title(response.request.who.as_str(), "HTTP Response");
+    log_title(&response.request.transcript, "HTTP Response");
     match get_valid_path(&response.request) {
         Ok(path) => {
             if response.request.resource_type == "text/html" {
@@ -62,7 +68,7 @@ fn handle_client(stream: &TcpStream) -> io::Result<()> {
             }
         },
         Err(e) => {
-            println!("{} Failed to recognize requested file: {}", stream.peer_addr()?, e);
+            response.request.transcript.push(format!("Failed to recognize requested file: {}", e).as_str());
             response.set_error(e);
         }
     }

@@ -3,9 +3,14 @@ use std::net::TcpStream;
 use crate::http_util::split_method;
 use crate::http_error::{HttpError, http_errors};
 use crate::io_util::get_stream_name;
+use crate::headers::HttpHeaders;
+use crate::transcript::Transcript;
+use crate::util::get_time_str;
 
 pub struct HttpRequest {
     pub who: String,
+    pub transcript: Transcript,
+    pub headers: HttpHeaders,
     pub path: String,
     pub resource_type: String,
     pub version: String,
@@ -14,15 +19,22 @@ pub struct HttpRequest {
 }
 
 impl HttpRequest {
-    pub fn new(stream: &TcpStream) -> Self {
-        Self {
+    pub fn new(stream: &TcpStream) -> Result<Self, HttpError> {
+        let request = Self {
             who: get_stream_name(stream),
+            transcript: Transcript::new(stream)?,
+            headers: HttpHeaders::new(),
             path: String::new(),
             resource_type: String::new(),
             version: String::new(),
             valid: false,
             is_init: false
-        }
+        };
+
+        request.transcript.push("New transcript for HTTP connection")?;
+        request.transcript.push(format!(" at {} UTC\n by {}!", get_time_str(true, true), request.who).as_str())?;
+
+        Ok(request)
     }
 
     pub fn get_file_name(&self) -> String {
@@ -54,8 +66,8 @@ impl HttpRequest {
         let (method, path, version) = split_method(input.as_str()).ok_or_else(|| http_errors::msg::bad_request("Request did not match <method> <path> <version> format").set_info("Malformed request"))?;
 
         if method == "GET" {
-            println!("{} GET Request", self.who);
-            println!("{} Path: {}", self.who, path);
+            self.transcript.push("GET Request")?;
+            self.transcript.push(format!("Path: {}", path).as_str())?;
         } else {
             return Err(http_errors::msg::not_implemented(format!("Method {} is not implemented", method).as_str()).set_info("Unknown HTTP Method"));
         }
@@ -84,6 +96,8 @@ impl HttpRequest {
         if !self.is_init {
             return self.init(&input);
         }
+
+        self.headers.add_from_line(input.as_str())?;
 
         Ok(())
     }

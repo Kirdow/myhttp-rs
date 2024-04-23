@@ -1,8 +1,10 @@
 use std::net::TcpStream;
 
+use crate::headers::HttpHeaders;
 use crate::request::HttpRequest;
 use crate::http_error::{ HttpError, HttpCode };
 use crate::io_util::{ write_line, write_body };
+use crate::transcript::Transcript;
 
 pub enum HttpResponseData {
     Content(String),
@@ -12,6 +14,7 @@ pub enum HttpResponseData {
 
 pub struct HttpResponse<'a> {
     pub request: HttpRequest,
+    pub headers: HttpHeaders,
     stream: &'a TcpStream,
     pub error: Option<HttpError>,
     pub code: HttpCode,
@@ -22,6 +25,7 @@ impl<'a> HttpResponse<'a> {
     pub fn new(request: HttpRequest, stream: &'a TcpStream) -> Self {
         Self {
             request,
+            headers: HttpHeaders::new(),
             stream,
             error: None,
             code: HttpCode::E200,
@@ -61,26 +65,35 @@ impl<'a> HttpResponse<'a> {
         }
     }
 
-    pub fn flush(&self) -> std::io::Result<()> {
-        write_line(self.stream, format!("HTTP/1.1 {}", self.code).as_str())?;
+    pub fn flush(&mut self) -> std::io::Result<()> {
+        let ts = &self.request.transcript;
+
+        write_line(ts, self.stream, format!("HTTP/1.1 {}", self.code).as_str())?;
         if let Some(http_err) = &self.error {
-            write_line(self.stream, format!("X-Error-Info: {}", http_err.get_error_msg()).as_str())?;
-            println!("{} Full Error Info: {}", self.request.who, http_err);
+            write_line(ts, self.stream, format!("X-Error-Info: {}", http_err.get_error_msg()).as_str())?;
+            self.request.transcript.push(format!("Full Error Info: {}", http_err).as_str());
         }
 
-        write_line(self.stream, "Connection: close")?;
+        for (key, value) in self.headers.iter() {
+            if HttpHeaders::is_restricted_header(key) {
+                continue;
+            }
+
+            write_line(ts, self.stream, format!("{}: {}", key, value).as_str())?;
+        }
+
         match &self.data {
             HttpResponseData::Content(content) => {
-                write_line(self.stream, format!("Content-Type: {}", self.request.resource_type).as_str())?;
-                write_body(self.stream, content.as_str())?;
+                write_line(ts, self.stream, format!("Content-Type: {}", self.request.resource_type).as_str())?;
+                write_body(ts, self.stream, content.as_str())?;
             },
             HttpResponseData::Error(content) => {
-                write_line(self.stream, "Content-Type: text/html")?;
-                write_body(self.stream, content.as_str())?;
+                write_line(ts, self.stream, "Content-Type: text/html")?;
+                write_body(ts, self.stream, content.as_str())?;
             },
             HttpResponseData::None => {
-                write_line(self.stream, "Content-Type: text/html")?;
-                write_body(self.stream, Self::get_error_content(HttpCode::E501).as_str())?;
+                write_line(ts, self.stream, "Content-Type: text/html")?;
+                write_body(ts, self.stream, Self::get_error_content(HttpCode::E501).as_str())?;
             }
         }
 

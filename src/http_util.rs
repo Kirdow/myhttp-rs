@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::{http_error::{HttpError, http_errors}, HttpRequest};
+use crate::{http_error::{http_errors, HttpError}, io_util::validate_path, HttpRequest};
 
 pub fn split_method(input: &str) -> Option<(String, String, String)> {
     let mut parts = input.splitn(3, ' ');
