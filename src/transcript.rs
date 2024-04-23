@@ -1,11 +1,14 @@
 use std::{fs::{create_dir_all, File}, io::Write, net::TcpStream, path::{Path, PathBuf}};
 
-use crate::{http_error::{http_errors, HttpError}, io_util::{self, validate_path}, util::{self, get_time_str}};
+use chrono::{DateTime, Duration, Utc};
+
+use crate::{http_error::{http_errors, HttpError}, io_util::{self, validate_path}, request, str_util::Builder, util::{self, get_time_str, get_time_str_from}};
 
 
 pub struct Transcript {
     file: File,
-    prefix: Option<String>
+    prefix: Option<String>,
+    start: DateTime<Utc>
 }
 
 impl Transcript {
@@ -13,12 +16,21 @@ impl Transcript {
         let stream_name = io_util::get_stream_name(stream);
         // Escape name
         let stream_file_name = stream_name.replace(".", "_").replace(":", "_");
-        let current_time_int = util::get_time(0);
+        
+        let current_time = Utc::now();
+        let current_time_int = current_time.timestamp() as i32;
 
-        Ok(Self {
+        let transcript = Self {
             file: Self::try_get_file_name(&stream_file_name, current_time_int)?,
-            prefix: Some(stream_name)
-        })
+            prefix: Some(stream_name.to_owned()),
+            start: current_time
+        };
+
+        transcript.push("New transcript for HTTP connection")?;
+        transcript.push(format!(" at {} UTC", get_time_str_from(&transcript.start, true, true)).as_str())?;
+        transcript.push(format!(" by {}", stream_name).as_str())?;
+
+        Ok(transcript)
     }
 
     pub fn set_prefix(&mut self, prefix: &str) {
@@ -93,5 +105,37 @@ impl Transcript {
         self.file.flush().map_err(|e| {
             http_errors::msg::internal_server_error(format!("Failed to flush transcript file: {}", e).as_str())
         })
+    }
+}
+
+impl Drop for Transcript {
+    fn drop(&mut self) {
+        let duration: Duration = Utc::now().signed_duration_since(self.start);
+        
+        let mut builder = Builder::new(&String::from(" "));
+        let minutes = duration.num_minutes();
+        if minutes > 0 {
+            builder.append(&format!("{}m", minutes));
+        }
+
+        let seconds = duration.num_seconds() % 60;
+        if seconds > 0 {
+            builder.append(&format!("{}s", seconds));
+        }
+
+        let nanos = duration.subsec_nanos() as u64;
+        
+        let (small_str, small_unit) = if nanos < 100_000 {
+            (format!("{}ns", nanos), nanos)
+        } else {
+            (format!("{}\u{00B5}s", nanos / 1_000), nanos / 1_000)
+        };
+
+        if small_unit > 0 || builder.is_empty() {
+            builder.append(&small_str);
+        }
+
+        self.push(format!("\n\n\nTranscript ended after {}", builder.result).as_str()).ok();
+        self.flush().ok();
     }
 }

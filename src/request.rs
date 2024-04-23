@@ -20,7 +20,7 @@ pub struct HttpRequest {
 
 impl HttpRequest {
     pub fn new(stream: &TcpStream) -> Result<Self, HttpError> {
-        let request = Self {
+        Ok(Self {
             who: get_stream_name(stream),
             transcript: Transcript::new(stream)?,
             headers: HttpHeaders::new(),
@@ -29,12 +29,7 @@ impl HttpRequest {
             version: String::new(),
             valid: false,
             is_init: false
-        };
-
-        request.transcript.push("New transcript for HTTP connection")?;
-        request.transcript.push(format!(" at {} UTC\n by {}!", get_time_str(true, true), request.who).as_str())?;
-
-        Ok(request)
+        })
     }
 
     pub fn get_file_name(&self) -> String {

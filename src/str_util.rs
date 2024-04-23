@@ -36,4 +36,8 @@ impl Builder {
             None
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.result.is_empty()
+    }
 }
