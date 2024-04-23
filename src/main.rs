@@ -9,7 +9,7 @@ mod headers;
 mod transcript;
 
 use http_util::get_valid_path;
-use io_util::read_binary_file;
+use io_util::{read_string_file, read_binary_file};
 use request::HttpRequest;
 use response::HttpResponse;
 use transcript::Transcript;
@@ -70,12 +70,22 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
 
     match get_valid_path(&response.request) {
         Ok(path) => {
-            if response.request.resource_type == "text/html" || response.request.resource_type == "image/x-icon" {
+            if response.request.resource_type == "image/x-icon" {
                 match read_binary_file(path.as_str()) {
                     Err(e) => response.set_error(e),
                     Ok(content) => {
                         if let Err(e) = response.set_data_response(HttpCode::E200, content) {
                             response.request.transcript.push(format!("Failed to set data response: {}", e).as_str()).ok();
+                            response.set_error(e);
+                        }
+                    }
+                }
+            } else if response.request.resource_type == "text/html" {
+                match read_string_file(path.as_str()) {
+                    Err(e) => response.set_error(e),
+                    Ok(content) => {
+                        if let Err(e) = response.set_string_response(HttpCode::E200, content) {
+                            response.request.transcript.push(format!("Failed to set string response: {}", e).as_str()).ok();
                             response.set_error(e);
                         }
                     }

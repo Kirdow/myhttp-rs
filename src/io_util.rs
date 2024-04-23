@@ -34,6 +34,14 @@ pub fn write_body_data(ts: &mut Transcript, stream: &mut TcpStream, data: &Vec<u
     write_data(ts, stream, data)
 }
 
+pub fn read_string_file(path: &str) -> Result<String, HttpError> {
+    let mut file = File::open(path).map_err(|e| HttpError::convert_from(e, Some("Failed to open file")))?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).map_err(|e| HttpError::convert_from(e, Some("Failed to read file contents")))?;
+
+    Ok(contents)
+}
+
 pub fn read_binary_file(path: &str) -> Result<Vec<u8>, HttpError> {
     let mut file = File::open(path).map_err(|e| HttpError::convert_from(e, Some("Failed to open file")))?;
     let mut buffer = Vec::new();
