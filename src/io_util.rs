@@ -11,6 +11,13 @@ pub fn write_line(ts: &mut Transcript, mut stream: &TcpStream, line: &str) -> Re
     writeln!(stream, "{}\r", line).map_err(|e| HttpError::convert_from(e, Some("Failed to write line to HTTP stream")))
 }
 
+pub fn write_data(ts: &mut Transcript, mut stream: &TcpStream, data: &Vec<u8>) -> Result<(), HttpError> {
+    ts.with_prefix("<--", |ts| ts.push("<binary data>"))?;
+    stream.write(&data[..]).map_err(|e| HttpError::convert_from(e, Some("Failed to write binary data to HTTP stream")))?;
+
+    Ok(())
+}
+
 pub fn write_body(ts: &mut Transcript, stream: &TcpStream, body: &str) -> Result<(), HttpError> {
     let len = body.len();
 
@@ -24,9 +31,7 @@ pub fn write_body_data(ts: &mut Transcript, stream: &mut TcpStream, data: &Vec<u
 
     write_line(ts, stream, format!("Content-Length: {}", len).as_str())?;
     write_line(ts, stream, "")?;
-    stream.write(&data[..]).map_err(|e| HttpError::convert_from(e, Some("Failed to write data to HTTP stream")))?;
-    
-    Ok(())
+    write_data(ts, stream, data)
 }
 
 pub fn read_binary_file(path: &str) -> Result<Vec<u8>, HttpError> {
