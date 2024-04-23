@@ -6,6 +6,7 @@ pub struct HttpHeaders {
     pub map: HashMap<String, String>
 }
 
+#[allow(unused)]
 impl HttpHeaders {
     pub fn new() -> Self {
         Self {

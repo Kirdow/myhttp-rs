@@ -5,7 +5,6 @@ use crate::http_error::{HttpError, http_errors};
 use crate::io_util::get_stream_name;
 use crate::headers::HttpHeaders;
 use crate::transcript::Transcript;
-use crate::util::get_time_str;
 
 pub struct HttpRequest {
     pub who: String,

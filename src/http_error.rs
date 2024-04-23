@@ -28,6 +28,7 @@ pub struct HttpError {
     pub info: Option<String>
 }
 
+#[allow(unused)]
 impl HttpError {
     pub fn new(code: HttpCode) -> Self {
         Self {
@@ -138,6 +139,7 @@ pub mod http_errors {
     }
 }
 
+#[allow(unused)]
 impl HttpCode {
     pub fn from(code: i32) -> Self {
         match code {

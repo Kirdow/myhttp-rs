@@ -1,6 +1,6 @@
 use std::{fs::File, io::{Read, Write}, net::TcpStream, path::PathBuf};
 
-use crate::{http_error::{http_errors, HttpError}, transcript::Transcript};
+use crate::{http_error::HttpError, transcript::Transcript};
 
 pub fn get_stream_name(stream: &TcpStream) -> String {
     stream.peer_addr().map(|addr| addr.to_string()).unwrap_or(String::from("Unknown Address"))
@@ -29,14 +29,6 @@ pub fn write_body_data(ts: &mut Transcript, stream: &mut TcpStream, data: &Vec<u
     Ok(())
 }
 
-pub fn read_all_file(path: &str) -> Result<String, HttpError> {
-    let mut file = File::open(path).map_err(|e| HttpError::convert_from(e, Some("Failed to open file")))?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).map_err(|e| HttpError::convert_from(e, Some("Failed to read file contents")))?;
-
-    Ok(contents)
-}
-
 pub fn read_binary_file(path: &str) -> Result<Vec<u8>, HttpError> {
     let mut file = File::open(path).map_err(|e| HttpError::convert_from(e, Some("Failed to open file")))?;
     let mut buffer = Vec::new();
@@ -57,6 +49,7 @@ pub fn write_error(ts: &mut Transcript, stream: &TcpStream, http_err: HttpError)
     Ok(())
 }
 
+#[allow(unused)]
 pub fn validate_path(path: &PathBuf, base_path: Option<&PathBuf>) -> Option<String> {
     println!("Path: {:?}", path);
     match path.canonicalize() {

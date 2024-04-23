@@ -2,23 +2,26 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, TimeZone, Utc};
 
-use crate::{str_util::Builder, transcript::Transcript};
+use crate::{str_util::Builder, transcript::Transcript, http_error::HttpError};
 
-pub fn log_empty(ts: &Transcript, n: i32) {
+pub fn log_empty(ts: &Transcript, n: i32) -> Result<(), HttpError> {
     for _ in 0..n {
-        ts.push("");
+        ts.push("")?;
     }
+
+    Ok(())
 }
 
-pub fn log_title(ts: &Transcript, title: &str) {
-    log_empty(ts, 2);
-    ts.push(title);
+pub fn log_title(ts: &Transcript, title: &str) -> Result<(), HttpError> {
+    log_empty(ts, 2)?;
+    ts.push(title)
 }
 
-pub fn read_line(ts: &mut Transcript, line: &str) {
-    ts.with_prefix("-->", |ts| ts.push(line));
+pub fn read_line(ts: &mut Transcript, line: &str) -> Result<(), HttpError> {
+    ts.with_prefix("-->", |ts| ts.push(line))
 }
 
+#[allow(unused)]
 pub fn get_time(default: i32) -> i32 {
     let start = SystemTime::now();
     if let Ok(duration_since_epoch) = start.duration_since(UNIX_EPOCH) {

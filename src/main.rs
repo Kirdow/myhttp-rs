@@ -9,7 +9,7 @@ mod headers;
 mod transcript;
 
 use http_util::get_valid_path;
-use io_util::{read_all_file, read_binary_file};
+use io_util::read_binary_file;
 use request::HttpRequest;
 use response::HttpResponse;
 use transcript::Transcript;
@@ -18,9 +18,9 @@ use http_error::{HttpError, HttpCode, http_errors};
 
 use std::thread;
 use std::net::{TcpListener, TcpStream};
-use std::io::{self, BufRead, BufReader, Error, Write};
+use std::io::{self, BufRead, BufReader, Write};
 
-use crate::io_util::{get_stream_name, write_error};
+use crate::io_util::write_error;
 
 fn respond_client_error(ts: &mut Transcript, stream: &TcpStream, err: HttpError) -> io::Result<()> {
     write_error(ts, &stream, err).map_err(|e| e.convert_to(Some("Failed to send HTTP Error to client")))
@@ -35,14 +35,22 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
     let reader = BufReader::new(&stream);
 
     let mut request = HttpRequest::new(&stream).map_err(|e| e.convert_to(Some("Failed to create HTTP Request")))?;
-    log_title(&request.transcript, "HTTP Request");
+    if let Err(http_err) = log_title(&request.transcript, "HTTP Request") {
+        respond_client_error(&mut request.transcript, &stream, http_err)?;
+        return end_client(&stream);
+    }
+
     for line in reader.lines() {
         let line = line?;
         if line.is_empty() {
             break;
         }
 
-        read_line(&mut request.transcript, line.as_str());
+        if let Err(http_err) = read_line(&mut request.transcript, line.as_str()) {
+            respond_client_error(&mut request.transcript, &stream, http_err)?;
+            return end_client(&stream);
+        }
+
         if let Err(http_err) = request.feed(&line) {
             respond_client_error(&mut request.transcript, &stream, http_err)?;
             return end_client(&stream);
@@ -55,7 +63,11 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
         return end_client(&stream);
     }
 
-    log_title(&response.request.transcript, "HTTP Response");
+    if let Err(http_err) = log_title(&response.request.transcript, "HTTP Response") {
+        respond_client_error(&mut response.request.transcript, &stream, http_err)?;
+        return end_client(&stream);
+    }
+
     match get_valid_path(&response.request) {
         Ok(path) => {
             if response.request.resource_type == "text/html" || response.request.resource_type == "image/x-icon" {
@@ -63,7 +75,7 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
                     Err(e) => response.set_error(e),
                     Ok(content) => {
                         if let Err(e) = response.set_data_response(HttpCode::E200, content) {
-                            response.request.transcript.push(format!("Failed to set data response: {}", e).as_str());
+                            response.request.transcript.push(format!("Failed to set data response: {}", e).as_str()).ok();
                             response.set_error(e);
                         }
                     }
@@ -73,7 +85,7 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
             }
         },
         Err(e) => {
-            response.request.transcript.push(format!("Failed to recognize requested file: {}", e).as_str());
+            response.request.transcript.push(format!("Failed to recognize requested file: {}", e).as_str()).ok();
             response.set_error(e);
         }
     }

@@ -4,7 +4,6 @@ use crate::headers::HttpHeaders;
 use crate::request::HttpRequest;
 use crate::http_error::{ http_errors, HttpCode, HttpError };
 use crate::io_util::{ write_body, write_body_data, write_line };
-use crate::transcript::Transcript;
 
 pub enum HttpResponseData {
     Content(Vec<u8>),
@@ -21,6 +20,7 @@ pub struct HttpResponse<'a> {
     pub data: HttpResponseData
 }
 
+#[allow(unused)]
 impl<'a> HttpResponse<'a> {
     pub fn new(request: HttpRequest, stream: &'a mut TcpStream) -> Self {
         Self {

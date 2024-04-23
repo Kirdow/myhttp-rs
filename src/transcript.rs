@@ -1,8 +1,8 @@
-use std::{fs::{create_dir_all, File}, io::Write, net::TcpStream, path::{Path, PathBuf}};
+use std::{fs::{create_dir_all, File}, io::Write, net::TcpStream, path::PathBuf};
 
 use chrono::{DateTime, Duration, Utc};
 
-use crate::{http_error::{http_errors, HttpError}, io_util::{self, validate_path}, request, str_util::Builder, util::{self, get_time_str, get_time_str_from}};
+use crate::{http_error::{http_errors, HttpError}, io_util, str_util::Builder, util::{get_time_str, get_time_str_from}};
 
 struct TranscriptPrefix {
     pub prefix: String,
