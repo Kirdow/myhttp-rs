@@ -57,7 +57,12 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
             if response.request.resource_type == "text/html" || response.request.resource_type == "image/x-icon" {
                 match read_binary_file(path.as_str()) {
                     Err(e) => response.set_error(e),
-                    Ok(content) => response.set_response_data(HttpCode::E200, content)
+                    Ok(content) => {
+                        if let Err(e) = response.set_data_response(HttpCode::E200, content) {
+                            response.request.transcript.push(format!("Failed to set data response: {}", e).as_str());
+                            response.set_error(e);
+                        }
+                    }
                 }
             } else {
                 response.set_error(http_errors::msg::forbidden(format!("Invalid file type: {}", response.request.path).as_str()));

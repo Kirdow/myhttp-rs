@@ -2,17 +2,12 @@ use std::net::TcpStream;
 
 use crate::headers::HttpHeaders;
 use crate::request::HttpRequest;
-use crate::http_error::{ HttpError, HttpCode };
+use crate::http_error::{ http_errors, HttpCode, HttpError };
 use crate::io_util::{ write_body, write_body_data, write_line };
 use crate::transcript::Transcript;
 
-pub enum HttpDataType {
-    Text(String),
-    Binary(Vec<u8>)
-}
-
 pub enum HttpResponseData {
-    Content(HttpDataType),
+    Content(Vec<u8>),
     Error(String),
     None
 }
@@ -58,23 +53,27 @@ impl<'a> HttpResponse<'a> {
         }
     }
 
-    pub fn set_response(&mut self, code: HttpCode, content: String) {
+    pub fn set_error_response(&mut self, code: HttpCode, content: String) -> Result<(), HttpError> {
         if code.is_error() {
             self.code = code.clone();
             self.error = Some(HttpError::new(code));
             self.data = HttpResponseData::Error(content);
+            
+            Ok(())
         } else {
-            self.error = None;
-            self.code = code;
-            self.data = HttpResponseData::Content(HttpDataType::Text(content));
+            Err(http_errors::msg::internal_server_error("Failed to set error response"))
         }
     }
 
-    pub fn set_response_data(&mut self, code: HttpCode, data: Vec<u8>) {
+    pub fn set_data_response(&mut self, code: HttpCode, data: Vec<u8>) -> Result<(), HttpError> {
         if !code.is_error() {
             self.error = None;
             self.code = code;
-            self.data = HttpResponseData::Content(HttpDataType::Binary(data));
+            self.data = HttpResponseData::Content(data);
+
+            Ok(())
+        } else {
+            Err(http_errors::msg::internal_server_error("Failed to set data response"))
         }
     }
 
@@ -98,14 +97,7 @@ impl<'a> HttpResponse<'a> {
         match &self.data {
             HttpResponseData::Content(content) => {
                 write_line(ts, self.stream, format!("Content-Type: {}", self.request.resource_type).as_str()).map_err(HttpError::convert_to_direct)?;
-                match content {
-                    HttpDataType::Text(content) => {
-                        write_body(ts, self.stream, content.as_str()).map_err(HttpError::convert_to_direct)?;
-                    },
-                    HttpDataType::Binary(data) => {
-                        write_body_data(ts, &mut self.stream, data).map_err(HttpError::convert_to_direct)?;
-                    }
-                }
+                write_body_data(ts, &mut self.stream, content).map_err(HttpError::convert_to_direct)?;
             },
             HttpResponseData::Error(content) => {
                 write_line(ts, self.stream, "Content-Type: text/html").map_err(HttpError::convert_to_direct)?;
