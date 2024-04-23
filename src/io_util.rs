@@ -8,7 +8,7 @@ pub fn get_stream_name(stream: &TcpStream) -> String {
 
 pub fn write_line(ts: &mut Transcript, mut stream: &TcpStream, line: &str) -> Result<(), HttpError> {
     ts.with_prefix("<--", |ts| ts.push(line))?;
-    writeln!(stream, "{}\r", line).map_err(HttpError::from)
+    writeln!(stream, "{}\r", line).map_err(|e| HttpError::convert_from(e, Some("Failed to write line to HTTP stream")))
 }
 
 pub fn write_body(ts: &mut Transcript, stream: &TcpStream, body: &str) -> Result<(), HttpError> {
@@ -19,15 +19,30 @@ pub fn write_body(ts: &mut Transcript, stream: &TcpStream, body: &str) -> Result
     write_line(ts, stream, body)
 }
 
-pub fn read_all_file(path: &str) -> Result<String, HttpError> {
-    let mut file = File::open(path).map_err(|err| {
-        http_errors::msg::internal_server_error(format!("Failed to open file: {}", err.to_string()).as_str())
-    })?;
+pub fn write_body_data(ts: &mut Transcript, stream: &mut TcpStream, data: &Vec<u8>) -> Result<(), HttpError> {
+    let len = data.len();
+
+    write_line(ts, stream, format!("Content-Length: {}", len).as_str())?;
+    write_line(ts, stream, "")?;
+    stream.write(&data[..]).map_err(|e| HttpError::convert_from(e, Some("Failed to write data to HTTP stream")))?;
     
+    Ok(())
+}
+
+pub fn read_all_file(path: &str) -> Result<String, HttpError> {
+    let mut file = File::open(path).map_err(|e| HttpError::convert_from(e, Some("Failed to open file")))?;
     let mut contents = String::new();
-    file.read_to_string(&mut contents).map_err(HttpError::from)?;
+    file.read_to_string(&mut contents).map_err(|e| HttpError::convert_from(e, Some("Failed to read file contents")))?;
 
     Ok(contents)
+}
+
+pub fn read_binary_file(path: &str) -> Result<Vec<u8>, HttpError> {
+    let mut file = File::open(path).map_err(|e| HttpError::convert_from(e, Some("Failed to open file")))?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).map_err(|e| HttpError::convert_from(e, Some("Failed to read file buffer")))?;
+
+    Ok(buffer)
 }
 
 pub fn write_error(ts: &mut Transcript, stream: &TcpStream, http_err: HttpError) -> Result<(), HttpError> {

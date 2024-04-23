@@ -9,7 +9,7 @@ mod headers;
 mod transcript;
 
 use http_util::get_valid_path;
-use io_util::read_all_file;
+use io_util::{read_all_file, read_binary_file};
 use request::HttpRequest;
 use response::HttpResponse;
 use transcript::Transcript;
@@ -23,7 +23,7 @@ use std::io::{self, BufRead, BufReader, Error, Write};
 use crate::io_util::{get_stream_name, write_error};
 
 fn respond_client_error(ts: &mut Transcript, stream: &TcpStream, err: HttpError) -> io::Result<()> {
-    write_error(ts, &stream, err).map_err(io::Error::from)
+    write_error(ts, &stream, err).map_err(|e| e.convert_to(Some("Failed to send HTTP Error to client")))
 }
 
 fn end_client(mut stream: &TcpStream) -> io::Result<()> {
@@ -31,10 +31,10 @@ fn end_client(mut stream: &TcpStream) -> io::Result<()> {
     Ok(())
 }
 
-fn handle_client(stream: &TcpStream) -> io::Result<()> {
-    let reader = BufReader::new(stream);
+fn handle_client(mut stream: TcpStream) -> io::Result<()> {
+    let reader = BufReader::new(&stream);
 
-    let mut request = HttpRequest::new(stream).map_err(Error::from)?;
+    let mut request = HttpRequest::new(&stream).map_err(|e| e.convert_to(Some("Failed to create HTTP Request")))?;
     log_title(&request.transcript, "HTTP Request");
     for line in reader.lines() {
         let line = line?;
@@ -45,19 +45,19 @@ fn handle_client(stream: &TcpStream) -> io::Result<()> {
         read_line(&mut request.transcript, line.as_str());
         if let Err(http_err) = request.feed(&line) {
             respond_client_error(&mut request.transcript, &stream, http_err)?;
-            return end_client(stream);
+            return end_client(&stream);
         }
     }
 
-    let mut response = HttpResponse::new(request, &stream);
+    let mut response = HttpResponse::new(request, &mut stream);
 
     log_title(&response.request.transcript, "HTTP Response");
     match get_valid_path(&response.request) {
         Ok(path) => {
-            if response.request.resource_type == "text/html" {
-                match read_all_file(path.as_str()) {
+            if response.request.resource_type == "text/html" || response.request.resource_type == "image/x-icon" {
+                match read_binary_file(path.as_str()) {
                     Err(e) => response.set_error(e),
-                    Ok(content) => response.set_response(HttpCode::E200, content)
+                    Ok(content) => response.set_response_data(HttpCode::E200, content)
                 }
             } else {
                 response.set_error(http_errors::msg::forbidden(format!("Invalid file type: {}", response.request.path).as_str()));
@@ -70,7 +70,7 @@ fn handle_client(stream: &TcpStream) -> io::Result<()> {
     }
 
     response.flush()?;
-    end_client(stream)
+    end_client(&stream)
 }
 
 fn main() -> std::io::Result<()> {
@@ -83,8 +83,9 @@ fn main() -> std::io::Result<()> {
             Ok(stream) => {
                 println!("New connection: {}", stream.peer_addr()?);
                 thread::spawn(move || {
-                    if let Err(e) = handle_client(&stream) {
-                        eprintln!("{} Failed to handle client: {}", stream.peer_addr()
+                    let client_addr = stream.peer_addr();
+                    if let Err(e) = handle_client(stream) {
+                        eprintln!("{} Failed to handle client: {}", client_addr
                             .map(|addr| addr.to_string())
                             .unwrap_or("Unknown Address".to_string()), e);
                     }

@@ -47,7 +47,7 @@ impl HttpRequest {
         } else if self.path.ends_with(".png") {
             resource_type = "image/png";
         } else if self.path.ends_with(".ico") {
-            resource_type = "image/vnd.microsoft.icon";
+            resource_type = "image/x-icon";
         } else {
             return Err(http_errors::msg::forbidden("Invalid/Unaccepted resource type").set_info("Invalid MIME Type"));
         }

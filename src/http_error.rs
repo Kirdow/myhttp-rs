@@ -61,19 +61,29 @@ impl HttpError {
         self.info = Some(msg.to_string());
         self.to_owned()
     }
-}
 
-impl From<HttpError> for Error {
-    fn from(err: HttpError) -> Error {
-        println!("IO <-- HTTP Error: {}", err.to_string());
-        Error::new(ErrorKind::Other, format!("HTTP Error: {}", err.to_string()))
+    pub fn convert_from(e: Error, msg: Option<&str>) -> Self {
+        if let Some(msg) = msg {
+            println!("HTTP <-- IO Error: \"{}\" Reason: {}", e.to_string(), msg);
+            http_errors::msg::internal_server_error(format!("HTTP Error: \"{}\" from IO Error: \"{}\"", msg, e.to_string()).as_str())
+        } else {
+            println!("HTTP <-- IO Error: {}", e.to_string());
+            http_errors::msg::internal_server_error(format!("HTTP Error: {}", e.to_string()).as_str())
+        }
     }
-}
 
-impl From<Error> for HttpError {
-    fn from(err: Error) -> HttpError {
-        println!("HTTP <-- IO Error: {}", err.to_string());
-        http_errors::msg::internal_server_error(format!("IO Error: {}", err.to_string()).as_str())
+    pub fn convert_to(&self, msg: Option<&str>) -> Error {
+        if let Some(msg) = msg {
+            println!("IO <-- HTTP Error: \"{}\" Reason: {}", self.to_string(), msg);
+            Error::new(ErrorKind::Other, format!("IO Error: \"{}\" from HTTP Error: \"{}\"", msg, self.to_string()).as_str())
+        } else {
+            println!("IO <-- HTTP Error: {}", self.to_string());
+            Error::new(ErrorKind::Other, format!("IO Error: {}", self.to_string()))
+        }
+    }
+
+    pub fn convert_to_direct(err: HttpError) -> Error {
+        err.convert_to(None)
     }
 }
 

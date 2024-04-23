@@ -101,7 +101,7 @@ impl Transcript {
             full_path.push(path);
             
             if !full_path.exists() {
-                return File::create(&full_path).map_err(HttpError::from);
+                return File::create(&full_path).map_err(|e| HttpError::convert_from(e, Some("Failed to create transcript file")));
             }
 
             counter += 1;
@@ -130,11 +130,11 @@ impl Transcript {
         };
 
         println!("[TS] {}", data);
-        write!(&self.file, "{}\r\n", data).map_err(HttpError::from)
+        write!(&self.file, "{}\r\n", data).map_err(|e| HttpError::convert_from(e, Some("Failed to write to transcript file")))
     }
 
     pub fn flush(&mut self) -> Result<(), HttpError> {
-        self.file.flush().map_err(HttpError::from)
+        self.file.flush().map_err(|e| HttpError::convert_from(e, Some("Failed to flush transcript file")))
     }
 }
 
